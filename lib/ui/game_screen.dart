@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 import '../audio/sound_manager.dart';
 import '../game/game_controller.dart';
 import '../game/game_settings.dart';
+import '../storage/settings_store.dart';
 import 'crumb_view.dart';
 import 'feeder_view.dart';
 import 'mouse_view.dart';
@@ -26,6 +27,7 @@ class _GameScreenState extends State<GameScreen>
   static const double _maxStep = 0.05;
 
   final GameSettings _settings = GameSettings();
+  final SettingsStore _settingsStore = SettingsStore();
   late final SoundManager _sound = SoundManager(enabled: _settings.soundEnabled);
   late final GameController _controller =
       GameController(settings: _settings, sound: _sound);
@@ -38,16 +40,25 @@ class _GameScreenState extends State<GameScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _ticker = createTicker(_onTick)..start();
+    // Applied after the first frame, then every later change is saved back.
+    _settingsStore.applySaved(_settings).then((_) {
+      if (mounted) _settings.addListener(_persistSettings);
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _settings.removeListener(_persistSettings);
     _ticker.dispose();
     _controller.dispose();
     _settings.dispose();
     _sound.dispose();
     super.dispose();
+  }
+
+  void _persistSettings() {
+    _settingsStore.save(_settings);
   }
 
   @override
