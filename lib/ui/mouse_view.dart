@@ -125,9 +125,6 @@ class MousePainter extends CustomPainter {
     if (_eating) {
       _drawCrumbBits(canvas, chew);
     }
-    if (_begging) {
-      _drawBegRequest(canvas);
-    }
 
     canvas.restore();
   }
@@ -448,25 +445,6 @@ class MousePainter extends CustomPainter {
         paint,
       );
     }
-  }
-
-  void _drawBegRequest(Canvas canvas) {
-    // A little crumb bobbing above the head: "feed me".
-    final bounce = 0.5 + 0.5 * math.sin(activityTime * 2 * math.pi * 1.3);
-    final center = Offset(30, -14 - bounce * 4);
-    canvas.drawCircle(
-      center,
-      4.5,
-      Paint()..color = Color.fromRGBO(0xB0, 0x7B, 0x48, 0.55 + bounce * 0.35),
-    );
-    canvas.drawCircle(
-      center,
-      4.5,
-      Paint()
-        ..color = const Color(0x665A5048)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
   }
 
   @override

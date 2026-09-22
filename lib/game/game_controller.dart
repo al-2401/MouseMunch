@@ -306,8 +306,9 @@ class GameController extends ChangeNotifier {
   }
 
   void _tickBegging(double dt) {
-    // Face the player while asking.
-    heading = _turnTowards(heading, -math.pi / 2, turnRate * dt);
+    // Face the player while asking, turning its head side to side.
+    final wobble = math.sin(activityTime * 2 * math.pi * 0.55) * 0.4;
+    heading = _turnTowards(heading, -math.pi / 2 + wobble, turnRate * dt);
 
     // A crumb landed while the mouse was mid-beg: drop down and go eat.
     if (crumbs.isNotEmpty) {
