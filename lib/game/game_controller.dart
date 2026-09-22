@@ -20,6 +20,10 @@ enum MouseActivity {
 
   /// Poked by the player: squeaking and struggling.
   struggling,
+
+  /// Floor is empty: standing up on its hind legs at the centre, asking to
+  /// be fed.
+  begging,
 }
 
 /// Runs the simulation: the crumbs, the mouse and the transitions between its
@@ -31,6 +35,12 @@ class GameController extends ChangeNotifier {
 
   /// How long the mouse struggles after being poked, in seconds.
   static const double struggleDuration = 1.1;
+
+  /// How long a begging mouse stands up before dropping back down, in seconds.
+  static const double beggingDuration = 1.6;
+
+  /// How long the mouse waits at the centre between begs, in seconds.
+  static const double beggingCooldown = 2.4;
 
   /// How close the mouse has to get before it can start eating.
   static const double arriveDistance = 24;
@@ -76,6 +86,7 @@ class GameController extends ChangeNotifier {
   int eatenCount = 0;
 
   int? _targetId;
+  bool _headingToCenter = false;
   int _nextCrumbId = 0;
   double _crunchTimer = 0;
 
@@ -97,6 +108,9 @@ class GameController extends ChangeNotifier {
     if (activity != MouseActivity.eating) return 0;
     return (activityTime / settings.eatDuration).clamp(0, 1);
   }
+
+  /// Where the mouse waits and begs once the floor is empty.
+  Offset get _fieldCenter => Offset(fieldSize.width / 2, fieldSize.height / 2);
 
   /// Called by the layout once the size of the play field is known.
   void resize(Size size, Rect feeder) {
@@ -132,6 +146,8 @@ class GameController extends ChangeNotifier {
         _tickEating(dt);
       case MouseActivity.struggling:
         _tickStruggling();
+      case MouseActivity.begging:
+        _tickBegging(dt);
     }
 
     notifyListeners();
@@ -173,6 +189,7 @@ class GameController extends ChangeNotifier {
     if (crumbs.isEmpty) return;
     crumbs.clear();
     _targetId = null;
+    _headingToCenter = false;
     sound.stopMoveLoop();
     _setActivity(MouseActivity.idle);
   }
@@ -185,31 +202,71 @@ class GameController extends ChangeNotifier {
 
   void _tickIdle() {
     final next = _nearestCrumb();
-    if (next == null) return;
-    _targetId = next.id;
-    sound.startMoveLoop(rate: settings.footstepRate);
-    _setActivity(MouseActivity.moving);
+    if (next != null) {
+      _targetId = next.id;
+      sound.startMoveLoop(rate: settings.footstepRate);
+      _setActivity(MouseActivity.moving);
+      return;
+    }
+    // Crumbs still falling from the feeder: wait for them to land instead of
+    // heading off to beg.
+    if (crumbs.isNotEmpty) return;
+    _tickCraving();
+  }
+
+  /// Nothing left on the floor: the mouse heads to the centre and asks for
+  /// more, on a loop, until it is fed again.
+  void _tickCraving() {
+    if ((_fieldCenter - mousePosition).distance > arriveDistance) {
+      _headingToCenter = true;
+      sound.startMoveLoop(rate: settings.footstepRate);
+      _setActivity(MouseActivity.moving);
+      return;
+    }
+    if (activityTime >= beggingCooldown) {
+      _beginBegging();
+    }
   }
 
   void _tickMoving(double dt) {
-    final target = targetCrumb;
-    if (target == null || !target.hasLanded) {
-      sound.stopMoveLoop();
-      _targetId = null;
-      _setActivity(MouseActivity.idle);
-      return;
+    // A crumb landed while the mouse was on its way to beg: go eat instead.
+    if (_headingToCenter && crumbs.isNotEmpty) {
+      final nearest = _nearestCrumb();
+      if (nearest != null) {
+        _headingToCenter = false;
+        _targetId = nearest.id;
+      }
     }
 
-    final toTarget = target.position - mousePosition;
+    Offset targetPosition;
+    if (_headingToCenter) {
+      targetPosition = _fieldCenter;
+    } else {
+      final target = targetCrumb;
+      if (target == null || !target.hasLanded) {
+        sound.stopMoveLoop();
+        _targetId = null;
+        _setActivity(MouseActivity.idle);
+        return;
+      }
+      targetPosition = target.position;
+    }
+
+    final toTarget = targetPosition - mousePosition;
     final distance = toTarget.distance;
     if (distance <= arriveDistance) {
       sound.stopMoveLoop();
-      _beginEating();
+      if (_headingToCenter) {
+        _headingToCenter = false;
+        _beginBegging();
+      } else {
+        _beginEating();
+      }
       return;
     }
 
-    // The mouse always runs head first, so it turns towards the crumb and then
-    // moves along its own facing.
+    // The mouse always runs head first, so it turns towards the target and
+    // then moves along its own facing.
     final desired = toTarget.direction;
     final maxTurn = math.max(turnRate, settings.mouseSpeed / minTurnRadius) * dt;
     heading = _turnTowards(heading, desired, maxTurn);
@@ -248,9 +305,28 @@ class GameController extends ChangeNotifier {
     _setActivity(MouseActivity.idle);
   }
 
+  void _tickBegging(double dt) {
+    // Face the player while asking.
+    heading = _turnTowards(heading, -math.pi / 2, turnRate * dt);
+
+    // A crumb landed while the mouse was mid-beg: drop down and go eat.
+    if (crumbs.isNotEmpty) {
+      _setActivity(MouseActivity.idle);
+      return;
+    }
+    if (activityTime >= beggingDuration) {
+      _setActivity(MouseActivity.idle);
+    }
+  }
+
   void _beginEating() {
     _crunchTimer = 0;
     _setActivity(MouseActivity.eating);
+  }
+
+  void _beginBegging() {
+    sound.play(Sfx.squeak, volume: 0.45);
+    _setActivity(MouseActivity.begging);
   }
 
   void _setActivity(MouseActivity next) {

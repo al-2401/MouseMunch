@@ -78,6 +78,8 @@ class MousePainter extends CustomPainter {
 
   bool get _idle => activity == MouseActivity.idle;
 
+  bool get _begging => activity == MouseActivity.begging;
+
   @override
   void paint(Canvas canvas, Size size) {
     // Stride grows with the speed setting so a fast mouse also scurries fast.
@@ -98,10 +100,17 @@ class MousePainter extends CustomPainter {
       canvas.rotate(math.sin(panic * 7) * 0.07);
     }
 
-    // Side to side sway while running, a slow breath while waiting.
+    // Side to side sway while running, a slow breath while waiting, a little
+    // hop while begging.
     final sway = _moving ? math.sin(walk) * 1.8 : 0.0;
-    final breath = _idle ? 1 + 0.05 * math.sin(clock * 2 * math.pi / 1.9) : 1.0;
-    canvas.translate(0, sway);
+    final beg = activityTime * 2 * math.pi * 1.3;
+    final hop = _begging ? -(0.5 + 0.5 * math.sin(beg)) * 2.5 : 0.0;
+    final breath = _idle
+        ? 1 + 0.05 * math.sin(clock * 2 * math.pi / 1.9)
+        : _begging
+            ? 1.16 + 0.04 * math.sin(beg)
+            : 1.0;
+    canvas.translate(0, sway + hop);
 
     _drawShadow(canvas);
     _drawTail(canvas, walk, panic);
@@ -115,6 +124,9 @@ class MousePainter extends CustomPainter {
     }
     if (_eating) {
       _drawCrumbBits(canvas, chew);
+    }
+    if (_begging) {
+      _drawBegRequest(canvas);
     }
 
     canvas.restore();
@@ -142,6 +154,9 @@ class MousePainter extends CustomPainter {
     } else if (_eating) {
       amplitude = 4;
       rate = clock * 2 * math.pi * 1.4;
+    } else if (_begging) {
+      amplitude = 5;
+      rate = activityTime * 2 * math.pi * 1.1;
     } else {
       amplitude = 6;
       rate = clock * 2 * math.pi * 0.55;
@@ -189,6 +204,7 @@ class MousePainter extends CustomPainter {
     for (final side in <double>[-1, 1]) {
       double dx = 0;
       double dy = 0;
+      double spread = 15;
       if (_moving) {
         dx = math.sin(walk + phase + (side > 0 ? math.pi : 0)) * 6;
         dy = math.cos(walk + phase + (side > 0 ? math.pi : 0)) * 1.2;
@@ -200,9 +216,14 @@ class MousePainter extends CustomPainter {
         // Front paws hold the crumb, hind paws stay put.
         dx = back ? 0 : 3 + math.sin(clock * 2 * math.pi * 3.5) * 0.8;
         dy = back ? 0 : -side * 1.5;
+      } else if (_begging && !back) {
+        // Front paws pulled together and held up near the chest; hind paws
+        // stay planted wide for balance.
+        spread = 4;
+        dx = 9 + math.sin(activityTime * 2 * math.pi * 1.3) * 1.2;
       }
 
-      final center = Offset(baseX + dx, side * 15 + dy);
+      final center = Offset(baseX + dx, side * spread + dy);
       final rect = Rect.fromCenter(center: center, width: 13, height: 8);
       canvas.drawOval(rect, paint);
       canvas.drawOval(rect, outline);
@@ -249,6 +270,8 @@ class MousePainter extends CustomPainter {
       canvas.rotate(math.sin(walk) * 0.04);
     } else if (_struggling) {
       canvas.rotate(math.sin(panic * 9) * 0.12);
+    } else if (_begging) {
+      canvas.translate(-2, 0);
     }
 
     _drawEars(canvas, panic);
@@ -343,6 +366,15 @@ class MousePainter extends CustomPainter {
       );
       return;
     }
+    if (_begging) {
+      // A small hopeful "o", asking nicely.
+      final open = 2.2 + 0.8 * math.sin(activityTime * 2 * math.pi * 1.3).abs();
+      canvas.drawOval(
+        Rect.fromCenter(center: const Offset(31, 0), width: 5, height: open),
+        Paint()..color = const Color(0xFF6B4A44),
+      );
+      return;
+    }
     if (_struggling) {
       // Squeaking: the mouth stays wide open.
       canvas.drawOval(
@@ -360,6 +392,8 @@ class MousePainter extends CustomPainter {
       jitter = math.sin(activityTime * 2 * math.pi * 7) * 1.6;
     } else if (_moving) {
       jitter = math.sin(walk) * 1.2;
+    } else if (_begging) {
+      jitter = math.sin(activityTime * 2 * math.pi * 1.3) * 1.0;
     } else {
       jitter = math.sin(clock * 2 * math.pi * 0.5) * 0.6;
     }
@@ -414,6 +448,25 @@ class MousePainter extends CustomPainter {
         paint,
       );
     }
+  }
+
+  void _drawBegRequest(Canvas canvas) {
+    // A little crumb bobbing above the head: "feed me".
+    final bounce = 0.5 + 0.5 * math.sin(activityTime * 2 * math.pi * 1.3);
+    final center = Offset(30, -14 - bounce * 4);
+    canvas.drawCircle(
+      center,
+      4.5,
+      Paint()..color = Color.fromRGBO(0xB0, 0x7B, 0x48, 0.55 + bounce * 0.35),
+    );
+    canvas.drawCircle(
+      center,
+      4.5,
+      Paint()
+        ..color = const Color(0x665A5048)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
   }
 
   @override

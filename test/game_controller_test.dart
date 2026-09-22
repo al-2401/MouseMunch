@@ -121,8 +121,46 @@ void main() {
     expect(controller.crumbs, isEmpty);
     expect(controller.eatenCount, 8);
 
+    // The floor is empty, so the mouse heads off to beg instead of staying put.
     _simulate(controller, 1);
-    expect(controller.activity, MouseActivity.idle);
+    expect(controller.activity, isNot(MouseActivity.eating));
+    expect(controller.activity, isNot(MouseActivity.struggling));
+  });
+
+  test('an empty floor sends the mouse to beg at the centre until fed', () {
+    final controller = _buildController(crumbCount: 1, mouseSpeed: 300, eatSpeed: 4);
+    controller.pourCrumbs(_feeder.bottomCenter);
+    _simulate(controller, 10, until: () => controller.crumbs.isEmpty);
+    expect(controller.crumbs, isEmpty);
+
+    _simulate(controller, 5, until: () => controller.activity == MouseActivity.begging);
+    expect(controller.activity, MouseActivity.begging);
+    final centre = Offset(_field.width / 2, _field.height / 2);
+    expect(
+      (controller.mousePosition - centre).distance,
+      lessThan(GameController.arriveDistance + 1),
+    );
+
+    // It drops back down after a while...
+    _simulate(controller, GameController.beggingDuration + 0.5);
+    expect(controller.activity, isNot(MouseActivity.begging));
+
+    // ...and asks again on its own, since nothing was poured.
+    _simulate(
+      controller,
+      GameController.beggingCooldown + 1,
+      until: () => controller.activity == MouseActivity.begging,
+    );
+    expect(controller.activity, MouseActivity.begging);
+
+    // Feeding it interrupts the begging cycle for good.
+    controller.pourCrumbs(_feeder.bottomCenter);
+    _simulate(
+      controller,
+      6,
+      until: () => controller.activity == MouseActivity.moving && controller.targetCrumb != null,
+    );
+    expect(controller.targetCrumb, isNotNull);
   });
 
   test('settings stay inside their limits and drive the eating duration', () {
